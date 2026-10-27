@@ -32,7 +32,7 @@ with verified scaling, and Home Assistant automations and dashboard cards around
 | [M5Stack ATOM Lite](https://docs.m5stack.com/en/core/atom_lite) (ESP32) | any ESP32 works; pins below are for the ATOM |
 | [M5Stack ATOM Tail485](https://docs.m5stack.com/en/atom/tail485) | RS485 transceiver that the ATOM plugs into; has screw terminals for A/B and a DC input |
 | 2-core cable | twisted pair, short run to the indoor unit's terminal block |
-| Power | USB-C 5 V adapter, or the Tail485's DC input - check the Tail485 docs for the allowed range |
+| Power | from the heat pump itself: the indoor unit's board has a DC output, clearly labelled once the front cover is off, wired to the Tail485's DC input. Check that the labelled voltage is within the Tail485's input range. (A USB-C 5 V adapter on the ATOM also works for bench testing.) |
 
 UART pins (ATOM + Tail485): `tx_pin: GPIO26`, `rx_pin: GPIO32`, 9600 baud, even parity.
 

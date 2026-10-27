@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">
+<style>.g{fill:none;stroke:#8a8f98;stroke-opacity:.35;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}.b{fill:#8a8f98;fill-opacity:.12;stroke:#8a8f98;stroke-opacity:.6;stroke-width:2}.t{fill:#8a8f98;font:600 12px sans-serif}</style>
+<path class="g" d="M110 100 H180"/><path class="g" d="M180 100 V30 H290"/><path class="g" d="M370 70 H384 V225 H60 V180"/><path class="g" d="M180 100 V150 H290"/><path class="g" d="M330 210 V225 H60 V180"/>
+<rect class="b" x="20" y="70" width="90" height="110" rx="10"/><text class="t" x="65" y="88" text-anchor="middle">Heat pump</text>
+<rect class="b" x="290" y="10" width="80" height="70" rx="14"/><text class="t" x="330" y="28" text-anchor="middle">Hot water</text>
+<rect class="b" x="290" y="125" width="80" height="85" rx="6"/><text class="t" x="330" y="141" text-anchor="middle">Floor</text>
+<path d="M298 168 H362 V176 H298 V184 H362 V192 H298 V200 H362" fill="none" stroke="#8a8f98" stroke-opacity=".45" stroke-width="2"/>
+<path d="M172 92 L188 100 L172 108 Z M188 92 L172 100 L188 108 Z" class="b"/><circle cx="180" cy="100" r="5" class="b"/>
+<text class="t" x="145" y="126" text-anchor="middle" font-size="10">valve</text>
+</svg>

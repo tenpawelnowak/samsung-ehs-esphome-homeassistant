@@ -1,0 +1,56 @@
+# Animated water-flow diagram: heat pump -> 3-way valve -> hot water tank or floor.
+# Copy dashboard/flow/*.svg to /config/www/hp_flow/ (served as /local/hp_flow/...).
+# The active path animates only while water is flowing (> 1 L/min).
+# 3-way valve (NASA 0x4067): 0 = space heating, 1 = DHW tank.
+type: picture-elements
+image: /local/hp_flow/base.svg
+elements:
+  - type: conditional
+    conditions:
+      - { condition: numeric_state, entity: sensor.heat_pump_3_way_valve, below: 0.5 }
+      - { condition: numeric_state, entity: sensor.heat_pump_water_flow_rate, above: 1 }
+    elements:
+      - type: image
+        image: /local/hp_flow/floor.svg
+        tap_action: { action: none }
+        style: { left: 50%, top: 50%, width: 100% }
+  - type: conditional
+    conditions:
+      - { condition: numeric_state, entity: sensor.heat_pump_3_way_valve, above: 0.5 }
+      - { condition: numeric_state, entity: sensor.heat_pump_water_flow_rate, above: 1 }
+    elements:
+      - type: image
+        image: /local/hp_flow/tank.svg
+        tap_action: { action: none }
+        style: { left: 50%, top: 50%, width: 100% }
+  - type: state-label
+    entity: sensor.heat_pump_water_flow_temperature
+    style: &label { left: 36.25%, top: 35.4%, font-size: 13px, color: var(--primary-text-color), white-space: nowrap }
+  - type: state-label
+    entity: sensor.heat_pump_water_flow_rate
+    style: { <<: *label, left: 60%, top: 36.7% }
+  - type: state-label
+    entity: sensor.heat_pump_compressor_frequency
+    style: { <<: *label, left: 16.25%, top: 50% }
+  - type: state-label
+    entity: sensor.heat_pump_cop
+    prefix: "COP "
+    style: { <<: *label, left: 16.25%, top: 60.4%, font-weight: "600" }
+  - type: state-label
+    entity: sensor.heat_pump_warm_water
+    style: { <<: *label, left: 82.5%, top: 22.5% }
+  - type: state-label
+    entity: number.heat_pump_water_heater_target
+    prefix: "target "
+    style: { <<: *label, left: 82.5%, top: 64.2% }
+  - type: state-label
+    entity: sensor.heat_pump_water_return_temperature
+    style: { <<: *label, left: 55%, top: 97.5% }
+  - type: conditional
+    conditions:
+      - { condition: numeric_state, entity: sensor.heat_pump_defrost_state, above: 0 }
+    elements:
+      - type: icon
+        icon: mdi:snowflake-melt
+        entity: sensor.heat_pump_defrost_state
+        style: { left: 25%, top: 69%, color: "#3d8bfd", --mdc-icon-size: 22px }

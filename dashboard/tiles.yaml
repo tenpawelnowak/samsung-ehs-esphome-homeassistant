@@ -1,0 +1,29 @@
+# Tiles for a sections dashboard (paste into a section's cards).
+- type: tile
+  entity: input_boolean.heat_pump_solar_surplus_active
+  name: Solar surplus heating
+  icon: mdi:solar-power-variant
+  color: amber
+  state_content: [state, last_changed]
+  tap_action: { action: more-info }
+  icon_tap_action: { action: none }   # status only - toggling by hand would skip the restore
+- type: tile
+  entity: sensor.heat_pump_cop
+  name: COP now
+  icon: mdi:heat-pump-outline
+  color: deep-orange
+- type: tile
+  entity: sensor.heat_pump_cop_today
+  name: COP today
+  icon: mdi:chart-line
+  color: deep-orange
+- type: tile
+  entity: sensor.heat_pump_heat_today
+  name: Heat today
+  icon: mdi:fire
+  color: deep-orange
+- type: tile
+  entity: sensor.heat_pump_electricity_today
+  name: Heat pump electricity today
+  icon: mdi:lightning-bolt
+  color: deep-orange

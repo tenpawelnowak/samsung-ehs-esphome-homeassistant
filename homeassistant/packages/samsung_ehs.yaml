@@ -1,0 +1,246 @@
+# Samsung EHS heat pump - Home Assistant package
+#
+# Install: put this file in /config/packages/ and enable packages in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Entity ids assume the ESPHome device from esphome/samsung-ehs.yaml (friendly_name "Heat Pump").
+# Search for "CHANGE ME" to find the places that refer to your own sensors
+# (phone alarms, solar inverter, battery).
+
+input_boolean:
+  heat_pump_solar_surplus_active:
+    name: Solar surplus heating active
+    icon: mdi:solar-power-variant
+
+template:
+  - sensor:
+      - name: Heat pump COP
+        unique_id: heat_pump_cop
+        state_class: measurement
+        # Heat output (W, over the last minute) / outdoor unit power (W). 0 while idle.
+        # Only the outdoor unit's power is measured, so this reads slightly high.
+        state: >
+          {% set p = states('sensor.heat_pump_outdoor_instantaneous_power') | float(0) %}
+          {% set q = states('sensor.heat_pump_heat_output_last_minute') | float(0) %}
+          {{ (q / p) | round(1) if p > 150 else 0 }}
+
+      - name: Heat pump heat total
+        unique_id: heat_pump_heat_total
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        state: "{{ (states('sensor.heat_pump_heat_output_total') | float(0) / 1000) | round(2) }}"
+
+      - name: Heat pump COP today
+        unique_id: heat_pump_cop_today
+        state_class: measurement
+        state: >
+          {% set q = states('sensor.heat_pump_heat_today') | float(0) %}
+          {% set e = states('sensor.heat_pump_electricity_today') | float(0) %}
+          {{ (q / e) | round(2) if e > 0.2 else 0 }}
+
+utility_meter:
+  heat_pump_heat_today:
+    name: Heat pump heat today
+    unique_id: heat_pump_heat_today
+    source: sensor.heat_pump_heat_total
+    cycle: daily
+  heat_pump_electricity_today:
+    name: Heat pump electricity today
+    unique_id: heat_pump_electricity_today
+    source: sensor.heat_pump_outdoor_cumulative_energy
+    cycle: daily
+
+script:
+  heat_pump_dhw_boost_15m:
+    alias: Heat pump - DHW boost (15 min)
+    description: >
+      Forces domestic hot water for 15 minutes with space heating paused, then restores
+      space heating, the DHW mode and the DHW thermostat exactly as they were.
+    mode: single
+    sequence:
+      - action: scene.create
+        data:
+          scene_id: heat_pump_before_dhw_boost
+          snapshot_entities:
+            - switch.heat_pump_heat_pump_power
+            - select.heat_pump_hotwater_mode
+            - climate.heat_pump_hot_water
+      - action: switch.turn_off
+        target: { entity_id: switch.heat_pump_heat_pump_power }
+      - action: climate.set_hvac_mode
+        target: { entity_id: climate.heat_pump_hot_water }
+        data: { hvac_mode: heat }
+      - action: select.select_option
+        target: { entity_id: select.heat_pump_hotwater_mode }
+        data: { option: Force }
+      - delay: { minutes: 15 }
+      - action: scene.turn_on
+        target: { entity_id: scene.heat_pump_before_dhw_boost }
+
+automation:
+  # ---------------------------------------------------------------- DHW night off
+  - id: heat_pump_dhw_night_off
+    alias: Heat pump - DHW off for the night
+    description: Turns DHW heating off at 22:30. Waits for a running boost to finish first.
+    triggers:
+      - trigger: time
+        at: "22:30:00"
+    actions:
+      - wait_template: "{{ is_state('script.heat_pump_dhw_boost_15m', 'off') }}"
+        timeout: "00:20:00"
+        continue_on_timeout: true
+      - action: climate.set_hvac_mode
+        target: { entity_id: climate.heat_pump_hot_water }
+        data: { hvac_mode: "off" }
+    mode: single
+
+  # ---------------------------------------------------------------- DHW back on before the first alarm
+  - id: heat_pump_dhw_before_alarm
+    alias: Heat pump - DHW on before the first alarm
+    description: >
+      Turns DHW back on 75 minutes before the earliest phone alarm (07:30 if there is none),
+      in Eco mode so only the heat pump heats, never the electric booster.
+      75 min took a tank from ~33 to 43 C at about 0 C outside on a 9 kW unit.
+    triggers:
+      - trigger: template
+        # CHANGE ME: your phones' "next alarm" sensors (HA companion app)
+        value_template: >
+          {% set a = [states('sensor.phone_1_next_alarm'), states('sensor.phone_2_next_alarm')]
+             | select('match', '\\d{4}-') | map('as_datetime') | select('>', now()) | list %}
+          {{ a | count > 0 and now() >= (a | min) - timedelta(minutes=75) }}
+      - trigger: time
+        at: "07:30:00"
+    conditions:
+      - condition: time
+        after: "04:00:00"
+        before: "09:00:00"
+      - condition: state
+        entity_id: climate.heat_pump_hot_water
+        state: "off"
+    actions:
+      - action: climate.set_hvac_mode
+        target: { entity_id: climate.heat_pump_hot_water }
+        data: { hvac_mode: heat }
+      - action: climate.set_preset_mode
+        target: { entity_id: climate.heat_pump_hot_water }
+        data: { preset_mode: DAY }
+      - action: select.select_option
+        target: { entity_id: select.heat_pump_hotwater_mode }
+        data: { option: Eco }
+    mode: single
+
+  # ---------------------------------------------------------------- Solar surplus -> heat
+  # Hot DHW and a warmer floor are the cheapest "battery" for spare solar power.
+  # Start: 09-15, home battery >= 90 %, exporting > 2.5 kW for 10 min (also checked every 10 min).
+  # Then: space-heating water +5 C (max 40), DHW 55 C in Power mode (heat pump + booster).
+  # Stop: importing > 500 W or battery < 85 % for 10 min, PV < 1.5 kW for 15 min, or 15:00.
+  # Restores the previous settings (or safe defaults after an HA restart).
+  # Note: tap water can be up to 55 C while/after this runs - a thermostatic mixer helps.
+  - id: heat_pump_solar_surplus
+    alias: Heat pump - use solar surplus
+    triggers:
+      # CHANGE ME: grid power sensor (negative = export), battery %, PV power
+      - trigger: numeric_state
+        entity_id: sensor.inverter_grid_power
+        below: -2500
+        for: { minutes: 10 }
+        id: start
+      - trigger: time_pattern
+        minutes: "/10"
+        id: start
+      - trigger: numeric_state
+        entity_id: sensor.inverter_grid_power
+        above: 500
+        for: { minutes: 10 }
+        id: stop
+      - trigger: numeric_state
+        entity_id: sensor.inverter_battery
+        below: 85
+        for: { minutes: 10 }
+        id: stop
+      - trigger: numeric_state
+        entity_id: sensor.inverter_pv_power
+        below: 1500
+        for: { minutes: 15 }
+        id: stop
+      - trigger: time
+        at: "15:00:00"
+        id: stop
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: start
+              - condition: state
+                entity_id: input_boolean.heat_pump_solar_surplus_active
+                state: "off"
+              - condition: time
+                after: "09:00:00"
+                before: "15:00:00"
+              - condition: numeric_state
+                entity_id: sensor.inverter_battery
+                above: 89
+              - condition: numeric_state
+                entity_id: sensor.inverter_grid_power
+                below: -2500
+              - condition: state
+                entity_id: switch.heat_pump_heat_pump_power
+                state: "on"
+              - condition: state
+                entity_id: script.heat_pump_dhw_boost_15m
+                state: "off"
+            sequence:
+              - action: scene.create
+                data:
+                  scene_id: heat_pump_before_solar_surplus
+                  snapshot_entities:
+                    - number.heat_pump_water_heater_target
+                    - climate.heat_pump_hot_water
+                    - select.heat_pump_hotwater_mode
+              - action: input_boolean.turn_on
+                target: { entity_id: input_boolean.heat_pump_solar_surplus_active }
+              - action: number.set_value
+                target: { entity_id: number.heat_pump_water_heater_target }
+                data:
+                  value: "{{ [states('number.heat_pump_water_heater_target') | float(30) + 5, 40] | min }}"
+              - action: climate.set_hvac_mode
+                target: { entity_id: climate.heat_pump_hot_water }
+                data: { hvac_mode: heat }
+              - action: climate.set_temperature
+                target: { entity_id: climate.heat_pump_hot_water }
+                data: { temperature: 55 }
+              - action: select.select_option
+                target: { entity_id: select.heat_pump_hotwater_mode }
+                data: { option: Power }
+          - conditions:
+              - condition: trigger
+                id: stop
+              - condition: state
+                entity_id: input_boolean.heat_pump_solar_surplus_active
+                state: "on"
+            sequence:
+              - if:
+                  - condition: template
+                    value_template: "{{ states.scene.heat_pump_before_solar_surplus is not none }}"
+                then:
+                  - action: scene.turn_on
+                    target: { entity_id: scene.heat_pump_before_solar_surplus }
+                else:
+                  # HA restarted mid-run: the snapshot is gone, fall back to defaults.
+                  - action: number.set_value
+                    target: { entity_id: number.heat_pump_water_heater_target }
+                    data: { value: 30 }
+                  - action: climate.set_preset_mode
+                    target: { entity_id: climate.heat_pump_hot_water }
+                    data: { preset_mode: DAY }
+                  - action: climate.set_temperature
+                    target: { entity_id: climate.heat_pump_hot_water }
+                    data: { temperature: 43 }
+                  - action: select.select_option
+                    target: { entity_id: select.heat_pump_hotwater_mode }
+                    data: { option: Eco }
+              - action: input_boolean.turn_off
+                target: { entity_id: input_boolean.heat_pump_solar_surplus_active }
+    mode: queued

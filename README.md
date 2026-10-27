@@ -60,6 +60,8 @@ The terminals are labelled on the board.
    then OTA. Keep `friendly_name: Heat Pump` - the HA files below expect `sensor.heat_pump_*`.
    On a low-RAM host (Home Assistant Yellow/Green) uncomment `compile_process_limit: 1` and stop
    memory-hungry add-ons while compiling.
+   The component is pinned to the commit tested here (`fe08cb0`, 2026-09-30). To update, change
+   the `@...` ref in `external_components` deliberately and re-test.
 2. **Home Assistant**: copy `homeassistant/packages/samsung_ehs.yaml` to `/config/packages/`
    (enable packages, see the file header) and change the lines marked `CHANGE ME`
    (phone alarm sensors, inverter grid/battery/PV sensors). Restart HA.

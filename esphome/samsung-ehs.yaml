@@ -52,7 +52,7 @@ uart:
 
 # Import custom component from GitHub
 external_components:
-  - source: github://omerfaruk-aran/esphome_samsung_hvac_bus@main # Use @stable if you want a more stable experience, but note a lot of this example code breaks.
+  - source: github://omerfaruk-aran/esphome_samsung_hvac_bus@fe08cb0465974895fee6e20a961c8beee28d13fc # pinned: main as of 2026-09-30 (PR #379), the version tested here
     components: [samsung_ac]
 
 # Configuration of AC component

@@ -43,6 +43,12 @@ between indoor and outdoor unit), as described in the
 [component's README](https://github.com/omerfaruk-aran/esphome_samsung_hvac_bus). If you see no
 data in the ESPHome logs, swap A and B.
 
+On the AE260RNWSGG both are on the **vertical terminal strip at the right edge of the main board**
+(arrow), behind the front cover: **F1/F2** (bus) and the **DC +/-** output that powers the ATOM.
+The terminals are labelled on the board.
+
+![Indoor unit main board, F1/F2 and DC terminals](docs/img/indoor-unit-terminals.jpg)
+
 > ⚠️ The indoor unit contains mains voltage. Switch the heat pump off at the breaker before opening
 > it, and only connect to the low-voltage communication terminals. If in doubt, ask your installer.
 > You do this at your own risk.

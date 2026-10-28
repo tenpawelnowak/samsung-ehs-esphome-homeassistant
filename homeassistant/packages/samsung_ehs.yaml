@@ -12,6 +12,9 @@ input_boolean:
   heat_pump_solar_surplus_active:
     name: Solar surplus heating active
     icon: mdi:solar-power-variant
+  heat_pump_morning_floor_paused:
+    name: Morning DHW - space heating paused
+    icon: mdi:heating-coil
 
 template:
   - sensor:
@@ -102,9 +105,13 @@ automation:
     description: >
       Turns DHW back on 75 minutes before the earliest phone alarm (07:30 if there is none),
       in Eco mode so only the heat pump heats, never the electric booster.
-      75 min took a tank from ~33 to 43 C at about 0 C outside on a 9 kW unit.
+      Space heating is paused until the tank is within 1 C of target (max 80 min): when both
+      ask for heat, the controller only gives DHW ~10 min before switching back to space
+      heating, and in Eco there is no booster to finish the tank. Guard triggers turn space
+      heating back on after an HA restart or at 09:30 if the pause flag is still set.
     triggers:
       - trigger: template
+        id: start
         # CHANGE ME: your phones' "next alarm" sensors (HA companion app)
         value_template: >
           {% set a = [states('sensor.phone_1_next_alarm'), states('sensor.phone_2_next_alarm')]
@@ -112,24 +119,65 @@ automation:
           {{ a | count > 0 and now() >= (a | min) - timedelta(minutes=75) }}
       - trigger: time
         at: "07:30:00"
-    conditions:
-      - condition: time
-        after: "04:00:00"
-        before: "09:00:00"
-      - condition: state
-        entity_id: climate.heat_pump_hot_water
-        state: "off"
+        id: start
+      - trigger: homeassistant
+        event: start
+        id: guard
+      - trigger: time
+        at: "09:30:00"
+        id: guard
     actions:
-      - action: climate.set_hvac_mode
-        target: { entity_id: climate.heat_pump_hot_water }
-        data: { hvac_mode: heat }
-      - action: climate.set_preset_mode
-        target: { entity_id: climate.heat_pump_hot_water }
-        data: { preset_mode: DAY }
-      - action: select.select_option
-        target: { entity_id: select.heat_pump_hotwater_mode }
-        data: { option: Eco }
-    mode: single
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: start
+              - condition: time
+                after: "04:00:00"
+                before: "09:00:00"
+              - condition: state
+                entity_id: climate.heat_pump_hot_water
+                state: "off"
+            sequence:
+              - action: climate.set_hvac_mode
+                target: { entity_id: climate.heat_pump_hot_water }
+                data: { hvac_mode: heat }
+              - action: climate.set_preset_mode
+                target: { entity_id: climate.heat_pump_hot_water }
+                data: { preset_mode: DAY }
+              - action: select.select_option
+                target: { entity_id: select.heat_pump_hotwater_mode }
+                data: { option: Eco }
+              - if:
+                  - condition: state
+                    entity_id: switch.heat_pump_heat_pump_power
+                    state: "on"
+                then:
+                  - action: input_boolean.turn_on
+                    target: { entity_id: input_boolean.heat_pump_morning_floor_paused }
+                  - action: switch.turn_off
+                    target: { entity_id: switch.heat_pump_heat_pump_power }
+                  - wait_template: >
+                      {{ states('sensor.heat_pump_warm_water') | float(0)
+                         >= (state_attr('climate.heat_pump_hot_water', 'temperature') | float(43)) - 1 }}
+                    timeout: "01:20:00"
+                    continue_on_timeout: true
+                  - action: switch.turn_on
+                    target: { entity_id: switch.heat_pump_heat_pump_power }
+                  - action: input_boolean.turn_off
+                    target: { entity_id: input_boolean.heat_pump_morning_floor_paused }
+          - conditions:
+              - condition: trigger
+                id: guard
+              - condition: state
+                entity_id: input_boolean.heat_pump_morning_floor_paused
+                state: "on"
+            sequence:
+              - action: switch.turn_on
+                target: { entity_id: switch.heat_pump_heat_pump_power }
+              - action: input_boolean.turn_off
+                target: { entity_id: input_boolean.heat_pump_morning_floor_paused }
+    mode: parallel
+    max: 3
 
   # ---------------------------------------------------------------- Solar surplus -> heat
   # Hot DHW and a warmer floor are the cheapest "battery" for spare solar power.

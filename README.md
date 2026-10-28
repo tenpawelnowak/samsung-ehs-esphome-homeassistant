@@ -17,7 +17,8 @@ with verified scaling, and Home Assistant automations and dashboard cards around
 - Flow / return temperature, flow rate, 3-way valve position, defrost, compressor frequency
 - Heat output (W and lifetime Wh) next to the outdoor unit's power → **live and daily COP**
 - Automations:
-  - DHW off at night, back on 75 min before the earliest phone alarm, heat-pump only (no booster)
+  - DHW off at night, back on 75 min before the earliest phone alarm, heat-pump only (no booster),
+    with space heating paused until the tank is hot
   - **Solar surplus**: when the home battery is full and you export, heat the tank to 55 °C and
     raise the floor water by 5 °C, then restore everything
   - 15-minute DHW boost script that pauses space heating and restores it afterwards
@@ -73,8 +74,12 @@ The terminals are labelled on the board.
 - Starting DHW earlier does not stop the booster: in **Standard** mode it joins ~20 min after
   the start, whatever the tank temperature. **Eco** keeps it off. Details in
   [docs/nasa-messages.md](docs/nasa-messages.md).
+- **Eco alone leaves the tank lukewarm** when space heating also wants heat: the controller gives
+  DHW only ~10 minutes, then the 3-way valve goes back to space heating and stays there (tank
+  33 → 36.7 °C, then nothing). In Standard the booster quietly finished the tank meanwhile. The
+  morning automation therefore pauses space heating until the tank is within 1 °C of target.
 - After the night switch-off the 254 L tank lost about 1 °C per hour (43 → 33 °C by 05:15).
-  From 33 °C the heat pump alone needs about 60-75 min to reach 43 °C at ~0 °C outside.
+  With the valve on the tank, the heat pump alone added ~3.7 °C in 10 min at ~0 °C outside.
 - Raising the space-heating water target by 5 °C only raised the compressor's draw by a few
   hundred watts at first - a floor slab takes a long time to warm up. Heating the DHW tank in
   Power mode is a much better sink for a few kW of solar surplus.

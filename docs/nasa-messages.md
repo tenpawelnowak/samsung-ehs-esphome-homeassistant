@@ -32,3 +32,7 @@ There is no direct switch for the electric booster heater. The DHW mode decides 
 | Power / Force | booster together with the heat pump straight away |
 
 So starting DHW earlier does **not** avoid the booster in Standard mode; Eco does.
+
+But in Eco, when space heating also has demand, the controller only gives DHW about 10 minutes
+before the 3-way valve (`0x4067`) goes back to space heating - with no booster, the tank stays
+lukewarm. Pausing space heating (`switch.heat_pump_heat_pump_power` off) until the tank is hot fixes it.
